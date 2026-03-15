@@ -28,8 +28,14 @@ export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleSignOut = async () => {
-    await signOut();
-    navigate('/login');
+    try {
+      await signOut();
+      navigate('/login');
+    } catch (err: unknown) {
+      console.error('Signout error:', err);
+      // Still navigate to login even if there's an error
+      navigate('/login');
+    }
   };
 
   const displayName =

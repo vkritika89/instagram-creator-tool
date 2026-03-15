@@ -94,24 +94,45 @@ function MiniReelCard({ reel }: { reel: typeof SHOWCASE_REELS_ROW1[0] }) {
 }
 
 export default function Login() {
-  const { signIn, signInWithGoogle, enterDemoMode } = useAuth();
+  const { signIn, signInWithGoogle, enterDemoMode, resetPassword } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
       await signIn(email, password);
+      
+      // Wait for auth state to update and profile to be fetched
+      // The signIn function now updates state immediately, but give it a moment
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
       toast.success('Welcome back!');
-      navigate('/dashboard');
+      
+      // Don't set loading to false - let the redirect happen
+      // RootRedirect will handle navigation based on profile state
+      navigate('/', { replace: true });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Login failed';
+      let message = 'Login failed';
+      if (err instanceof Error) {
+        message = err.message;
+        // Show more helpful error messages
+        if (message.includes('Invalid login credentials') || message.includes('invalid_credentials')) {
+          message = 'Invalid email or password. Please check your credentials or use "Forgot password?"';
+        } else if (message.includes('Email not confirmed') || message.includes('email_not_confirmed')) {
+          message = 'Please confirm your email first. Check your inbox for the confirmation link.';
+        } else if (message.includes('User not found')) {
+          message = 'No account found with this email. Please sign up first.';
+        }
+      }
+      console.error('Login error:', err);
       toast.error(message);
-    } finally {
       setLoading(false);
     }
   };
@@ -122,6 +143,31 @@ export default function Login() {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Google login failed';
       toast.error(message);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) {
+      toast.error('Please enter your email address');
+      return;
+    }
+    setForgotPasswordLoading(true);
+    try {
+      await resetPassword(email);
+      toast.success('Password reset email sent! Check your inbox.');
+      setShowForgotPassword(false);
+    } catch (err: unknown) {
+      let message = 'Failed to send reset email';
+      if (err instanceof Error) {
+        message = err.message;
+        if (message.includes('rate limit')) {
+          message = 'Email rate limit exceeded. Please wait 1 hour or reset password manually in Supabase dashboard (Authentication → Users → Reset password).';
+        }
+      }
+      toast.error(message, { duration: 6000 }); // Show longer for important messages
+    } finally {
+      setForgotPasswordLoading(false);
     }
   };
 
@@ -255,12 +301,52 @@ export default function Login() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className="text-xs text-slate-400 cursor-pointer hover:text-brand-600">Forgot password?</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
+                    className="text-xs text-slate-400 hover:text-brand-600 transition-colors"
+                  >
+                    Forgot password?
+                  </button>
                 </div>
                 <button type="submit" disabled={loading} className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-brand-600 to-pink-500 text-white font-semibold text-sm hover:opacity-90 disabled:opacity-50 transition-all hover:shadow-lg hover:shadow-brand-500/25">
                   {loading ? 'Signing in…' : 'Sign in'}
                 </button>
               </form>
+
+              {/* Forgot Password Modal */}
+              {showForgotPassword && (
+                <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                  <h3 className="text-sm font-semibold text-slate-900 mb-2">Reset Password</h3>
+                  <p className="text-xs text-slate-500 mb-3">Enter your email and we'll send you a reset link.</p>
+                  <form onSubmit={handleForgotPassword} className="space-y-3">
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      required
+                      className="w-full px-4 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 bg-white"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowForgotPassword(false)}
+                        className="flex-1 px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-100 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={forgotPasswordLoading}
+                        className="flex-1 px-4 py-2 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 disabled:opacity-50 transition-colors"
+                      >
+                        {forgotPasswordLoading ? 'Sending…' : 'Send Reset Link'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
 
               {/* Demo */}
               <button

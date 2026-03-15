@@ -78,9 +78,15 @@ export default function Signup() {
     }
     setLoading(true);
     try {
-      await signUp(email, password);
-      toast.success('Account created! Check your email to confirm.');
-      navigate('/dashboard');
+      const result = await signUp(email, password);
+      if (result?.needsConfirmation) {
+        toast.success('Account created! Please check your email to confirm your account before signing in.');
+        // Optionally redirect to login or show a message
+        setTimeout(() => navigate('/login'), 2000);
+      } else {
+        toast.success('Account created! Redirecting...');
+        navigate('/dashboard');
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Signup failed';
       toast.error(message);

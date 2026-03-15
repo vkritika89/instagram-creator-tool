@@ -126,9 +126,24 @@ export default function DashboardHome() {
       setStats({ weeklyPlansCount: 4, reelScriptsCount: 12, captionsCount: 8 });
       return;
     }
+    
+    // Add timeout to prevent hanging
+    const timeoutId = setTimeout(() => {
+      setStats({ weeklyPlansCount: 0, reelScriptsCount: 0, captionsCount: 0 });
+    }, 5000); // 5 second timeout
+    
     apiGet<Stats>('/api/stats')
-      .then(setStats)
-      .catch(() => setStats({ weeklyPlansCount: 0, reelScriptsCount: 0, captionsCount: 0 }));
+      .then((data) => {
+        clearTimeout(timeoutId);
+        setStats(data);
+      })
+      .catch((err) => {
+        clearTimeout(timeoutId);
+        console.error('Stats API error:', err);
+        setStats({ weeklyPlansCount: 0, reelScriptsCount: 0, captionsCount: 0 });
+      });
+    
+    return () => clearTimeout(timeoutId);
   }, [demoMode]);
 
   const quickActions = [
