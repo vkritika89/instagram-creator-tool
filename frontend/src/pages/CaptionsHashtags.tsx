@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { apiPost } from '../lib/api';
+import { useState, useRef } from 'react';
+import { apiPost, apiGet, apiGetVideoBlobUrl, ensureSession } from '../lib/api';
 import { MessageSquareText, Sparkles, Copy, Check, Hash, Film, Video, Loader2, Download, Play } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -29,37 +29,94 @@ export default function CaptionsHashtags() {
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const [hashtagsCopied, setHashtagsCopied] = useState(false);
 
+  const pollAbortRef = useRef<AbortController | null>(null);
+
   const handleGenerateVideo = async () => {
     if (!videoDescription.trim()) {
       toast.error('Please enter a video description');
       return;
     }
+    try {
+      await ensureSession();
+    } catch {
+      toast.error('Please log in to continue.');
+      return;
+    }
+    if (videoResult?.videoUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(videoResult.videoUrl);
+    }
     setVideoLoading(true);
     setVideoResult({ status: 'generating', message: 'Generating your video with Sora AI...' });
-    
+    pollAbortRef.current = new AbortController();
+
     try {
-      // TODO: Replace with actual API call when backend is ready
-      // const data = await apiPost<VideoResult>('/api/video/generate', {
-      //   description: videoDescription.trim(),
-      // });
-      
-      // Simulate API call for now
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      // Mock response
-      setVideoResult({
-        status: 'completed',
-        videoId: 'mock-video-id',
-        message: 'Video generated successfully!',
-        // videoUrl: 'https://example.com/video.mp4' // Will be set by backend
+      const data = await apiPost<VideoResult & { progress?: number }>('/api/video/generate', {
+        description: videoDescription.trim(),
       });
-      toast.success('Video generated successfully!');
+
+      if (data.status === 'failed') {
+        setVideoResult({ status: 'failed', message: data.message });
+        toast.error(data.message ?? 'Video generation failed');
+        return;
+      }
+
+      if (data.status === 'completed' && data.videoUrl) {
+        const blobUrl = await apiGetVideoBlobUrl(`/api/video/content/${data.videoId}`);
+        setVideoResult({
+          status: 'completed',
+          videoId: data.videoId,
+          videoUrl: blobUrl,
+          message: 'Video generated successfully!',
+        });
+        toast.success('Video generated successfully!');
+        setVideoLoading(false);
+        return;
+      }
+
+      let current = { ...data };
+      const poll = async (): Promise<void> => {
+        if (pollAbortRef.current?.signal.aborted) return;
+        const statusData = await apiGet<VideoResult & { progress?: number }>(
+          `/api/video/status/${current.videoId}`
+        );
+        if (pollAbortRef.current?.signal.aborted) return;
+
+        if (statusData.status === 'completed' && statusData.videoId) {
+          const blobUrl = await apiGetVideoBlobUrl(`/api/video/content/${statusData.videoId}`);
+          setVideoResult({
+            status: 'completed',
+            videoId: statusData.videoId,
+            videoUrl: blobUrl,
+            message: 'Video generated successfully!',
+          });
+          toast.success('Video generated successfully!');
+          return;
+        }
+        if (statusData.status === 'failed') {
+          setVideoResult({ status: 'failed', message: statusData.message });
+          toast.error(statusData.message ?? 'Video generation failed');
+          return;
+        }
+        setVideoResult({
+          status: 'generating',
+          videoId: statusData.videoId,
+          message: `Generating... ${statusData.progress ?? 0}%`,
+        });
+        setTimeout(() => poll(), 2500);
+      };
+      setVideoResult({
+        status: 'generating',
+        videoId: data.videoId,
+        message: data.message ?? 'Generating your video with Sora AI...',
+      });
+      await poll();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to generate video';
       setVideoResult({ status: 'failed', message });
       toast.error(message);
     } finally {
       setVideoLoading(false);
+      pollAbortRef.current = null;
     }
   };
 
@@ -182,15 +239,21 @@ export default function CaptionsHashtags() {
                       <div className="w-16 h-16 bg-white/80 rounded-full flex items-center justify-center mb-3 shadow-lg">
                         <Play className="w-8 h-8 text-pink-500 ml-1" fill="currentColor" />
                       </div>
-                      <p className="text-sm font-medium text-slate-700 mb-1">Video Generated!</p>
-                      <p className="text-xs text-slate-500">Video URL will appear here when backend is ready</p>
+                      <p className="text-sm font-medium text-slate-700 mb-1">Video generated</p>
+                      <p className="text-xs text-slate-500">Loading playback…</p>
                     </div>
                   )}
                   <div className="flex gap-2">
-                    <button className="flex-1 px-4 py-2 bg-pink-50 text-pink-600 rounded-lg text-sm font-medium hover:bg-pink-100 transition-colors flex items-center justify-center gap-2">
-                      <Download className="w-4 h-4" />
-                      Download
-                    </button>
+                    {videoResult.videoUrl && (
+                      <a
+                        href={videoResult.videoUrl}
+                        download="sora-video.mp4"
+                        className="flex-1 px-4 py-2 bg-pink-50 text-pink-600 rounded-lg text-sm font-medium hover:bg-pink-100 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Download className="w-4 h-4" />
+                        Download
+                      </a>
+                    )}
                     <button
                       onClick={() => {
                         setCaptionTopic(videoDescription);

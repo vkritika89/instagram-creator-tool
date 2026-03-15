@@ -103,8 +103,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
-      // No Supabase configured — just stop loading so the login page shows
-      console.warn('Supabase not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env');
+      console.warn(
+        'Supabase not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to frontend/.env then restart the dev server (npm run dev).'
+      );
       setLoading(false);
       return;
     }
@@ -222,7 +223,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string) => {
     if (!isSupabaseConfigured) {
-      throw new Error('Supabase not configured. Add your keys to .env file.');
+      throw new Error(
+        'Supabase not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to frontend/.env and restart the dev server.'
+      );
     }
     const { data, error } = await supabase.auth.signUp({ 
       email, 
@@ -240,7 +243,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     if (!isSupabaseConfigured) {
-      throw new Error('Supabase not configured. Add your keys to .env file.');
+      throw new Error(
+        'Supabase not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to frontend/.env and restart the dev server.'
+      );
     }
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
@@ -260,7 +265,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithGoogle = async () => {
     if (!isSupabaseConfigured) {
-      throw new Error('Supabase not configured. Add your keys to .env file.');
+      throw new Error(
+        'Supabase not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to frontend/.env and restart the dev server.'
+      );
     }
     
     const { data, error } = await supabase.auth.signInWithOAuth({

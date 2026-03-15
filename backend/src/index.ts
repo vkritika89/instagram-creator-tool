@@ -1,5 +1,8 @@
+import path from 'path';
 import dotenv from 'dotenv';
-dotenv.config();
+
+// Load .env from backend directory (works even when running from project root)
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 import express from 'express';
 import cors from 'cors';
@@ -14,6 +17,7 @@ import videoRoutes from './routes/video';
 import authorityScoreRoutes from './routes/authorityScore';
 import libraryRoutes from './routes/library';
 import statsRoutes from './routes/stats';
+import videoRoutes from './routes/video';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -24,6 +28,15 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+
+// Root — so visiting http://localhost:3001 doesn't show "Cannot GET"
+app.get('/', (_req, res) => {
+  res.json({
+    message: 'Instagram Creator Tool API',
+    health: '/api/health',
+    docs: 'Use the frontend at the URL configured in FRONTEND_URL (e.g. http://localhost:5173)',
+  });
+});
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -39,6 +52,12 @@ app.use('/api/video', authMiddleware, videoRoutes);
 app.use('/api/authority-score', authMiddleware, authorityScoreRoutes);
 app.use('/api/library', authMiddleware, libraryRoutes);
 app.use('/api/stats', authMiddleware, statsRoutes);
+app.use('/api/video', authMiddleware, videoRoutes);
+
+// 404 for unknown routes (avoids plain "Cannot GET /some-path")
+app.use((_req, res) => {
+  res.status(404).json({ error: 'Not found', path: _req.path });
+});
 
 // Start server
 app.listen(PORT, () => {
