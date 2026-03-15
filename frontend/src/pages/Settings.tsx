@@ -54,8 +54,14 @@ export default function Settings() {
   };
 
   const handleLogout = async () => {
-    await signOut();
-    navigate('/login');
+    try {
+      await signOut();
+      toast.success('Signed out successfully');
+      navigate('/login');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to sign out';
+      toast.error(message);
+    }
   };
 
   const displayName =
