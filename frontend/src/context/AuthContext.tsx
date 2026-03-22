@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, type ReactNode } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
@@ -22,6 +22,7 @@ interface AuthContextType {
   session: Session | null;
   profile: CreatorProfile | null;
   loading: boolean;
+  profileLoading: boolean;
   demoMode: boolean;
   sessionWarning: boolean;
   timeRemaining: number;
@@ -37,7 +38,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock data for demo mode
 const DEMO_USER: User = {
   id: 'demo-user-id',
   email: 'creator@demo.com',
@@ -58,60 +58,77 @@ const DEMO_PROFILE: CreatorProfile = {
   updated_at: new Date().toISOString(),
 };
 
-// Session timeout configuration (in milliseconds)
-// TESTING: Set to 1 minute for easy testing (change back to 30 minutes for production)
-const SESSION_TIMEOUT = 1 * 60 * 1000; // 1 minute (for testing)
-const SESSION_WARNING_TIME = 30 * 1000; // Show warning 30 seconds before timeout
+const SESSION_TIMEOUT = 30 * 60 * 1000;
+const SESSION_WARNING_TIME = 60 * 1000;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<CreatorProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
   const [sessionWarning, setSessionWarning] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [lastActivity, setLastActivity] = useState<number>(Date.now());
 
-  const fetchProfile = async (userId: string) => {
+  const profileRef = useRef<CreatorProfile | null>(null);
+  const fetchingRef = useRef(false);
+
+  const setProfileSafe = (data: CreatorProfile | null) => {
+    profileRef.current = data;
+    setProfile(data);
+  };
+
+  const fetchProfile = async (userId: string, isInitial = false) => {
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+    setProfileLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('creator_profiles')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
-      
-      // PGRST116 = no rows returned (user has no profile yet - this is OK for new users)
+      const result = await Promise.race([
+        supabase
+          .from('creator_profiles')
+          .select('*')
+          .eq('user_id', userId)
+          .single(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
+      ]);
+
+      if (result === null) {
+        console.warn('fetchProfile timed out');
+        return;
+      }
+
+      const { data, error } = result;
+
       if (error) {
         if (error.code === 'PGRST116') {
-          // No profile found - user is new, needs onboarding
-          setProfile(null);
+          // No profile row exists — user genuinely needs onboarding
+          setProfileSafe(null);
           return;
         }
         console.error('Error fetching profile:', error);
-        setProfile(null);
         return;
       }
-      
-      // Profile found - existing user
-      setProfile(data);
+
+      setProfileSafe(data);
     } catch (err) {
       console.error('Fetch profile error:', err);
-      setProfile(null);
+    } finally {
+      fetchingRef.current = false;
+      setProfileLoading(false);
     }
   };
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
-      // No Supabase configured — just stop loading so the login page shows
       console.warn('Supabase not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env');
       setLoading(false);
       return;
     }
 
     let mounted = true;
-    
-    // Maximum timeout - always stop loading after 10 seconds no matter what
+
     const maxTimeout = setTimeout(() => {
       if (mounted) {
         console.warn('Auth initialization timeout - forcing loading to stop');
@@ -119,48 +136,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }, 10000);
 
-    // Check for OAuth callback with timeout
-    const sessionPromise = supabase.auth.getSession();
-    const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 5000));
-
-    Promise.race([sessionPromise, timeoutPromise])
-      .then((result) => {
+    supabase.auth.getSession()
+      .then(({ data: { session: s } }) => {
         if (!mounted) return;
-        
-        if (result === null) {
-          // Timeout - stop loading anyway
-          console.warn('Session check timed out');
-          clearTimeout(maxTimeout);
-          setLoading(false);
-          return;
-        }
-
-        const { data: { session: s } } = result as { data: { session: any } };
         setSession(s);
         setUser(s?.user ?? null);
-        
-        if (s?.user) {
-          // Fetch profile with timeout protection
-          const profileTimeout = setTimeout(() => {
-            if (mounted) {
-              console.warn('Profile fetch timed out');
-              setProfile(null);
-              clearTimeout(maxTimeout);
-              setLoading(false);
-            }
-          }, 5000);
 
-          fetchProfile(s.user.id)
-            .catch((err) => {
-              console.error('Profile fetch error:', err);
-              setProfile(null);
-            })
+        if (s?.user) {
+          fetchProfile(s.user.id, true)
             .finally(() => {
-              clearTimeout(profileTimeout);
               clearTimeout(maxTimeout);
-              if (mounted) {
-                setLoading(false);
-              }
+              if (mounted) setLoading(false);
             });
         } else {
           clearTimeout(maxTimeout);
@@ -170,39 +156,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch((err) => {
         console.error('Get session error:', err);
         clearTimeout(maxTimeout);
-        if (mounted) {
-          setLoading(false);
-        }
+        if (mounted) setLoading(false);
       });
 
-    // Handle OAuth callbacks and auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, s) => {
         if (!mounted) return;
         console.log('Auth state changed:', event);
-        
-        // Handle OAuth callback
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          setSession(s);
-          setUser(s?.user ?? null);
-          if (s?.user) {
-            // Reset activity timer on login
-            setLastActivity(Date.now());
-            await fetchProfile(s.user.id);
-          }
-        } else if (event === 'SIGNED_OUT') {
+
+        if (event === 'SIGNED_OUT') {
           setSession(null);
           setUser(null);
-          setProfile(null);
-        } else {
-          setSession(s);
-          setUser(s?.user ?? null);
-          if (s?.user) {
+          setProfileSafe(null);
+          return;
+        }
+
+        setSession(s);
+        setUser(s?.user ?? null);
+
+        if (event === 'SIGNED_IN' && s?.user) {
+          setLastActivity(Date.now());
+          if (!profileRef.current) {
             await fetchProfile(s.user.id);
-          } else {
-            setProfile(null);
           }
         }
+        // TOKEN_REFRESHED — don't re-fetch profile; it hasn't changed
       }
     );
 
@@ -216,7 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const enterDemoMode = () => {
     setDemoMode(true);
     setUser(DEMO_USER);
-    setProfile(DEMO_PROFILE);
+    setProfileSafe(DEMO_PROFILE);
     setSession({} as Session);
   };
 
@@ -224,17 +202,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!isSupabaseConfigured) {
       throw new Error('Supabase not configured. Add your keys to .env file.');
     }
-    const { data, error } = await supabase.auth.signUp({ 
-      email, 
+    const { data, error } = await supabase.auth.signUp({
+      email,
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/dashboard`,
       },
     });
     if (error) throw error;
-    
-    // Check if email confirmation is required
-    // If user is null but no error, it means confirmation email was sent
     return { needsConfirmation: !data.user };
   };
 
@@ -244,16 +219,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
-    
-    // Update state immediately after successful login
+
     if (data.session) {
+      setLastActivity(Date.now());
       setSession(data.session);
       setUser(data.session.user);
-      setLastActivity(Date.now());
-      
-      // Fetch profile
+      setLoading(false);
+
       if (data.session.user) {
-        await fetchProfile(data.session.user.id);
+        fetchProfile(data.session.user.id).catch((err) => {
+          console.error('Profile fetch after login failed:', err);
+        });
       }
     }
   };
@@ -262,10 +238,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!isSupabaseConfigured) {
       throw new Error('Supabase not configured. Add your keys to .env file.');
     }
-    
-    const { data, error } = await supabase.auth.signInWithOAuth({
+
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { 
+      options: {
         redirectTo: `${window.location.origin}/dashboard`,
         queryParams: {
           access_type: 'offline',
@@ -273,14 +249,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
       },
     });
-    
+
     if (error) {
       console.error('Google OAuth error:', error);
       throw error;
     }
-    
-    // OAuth redirect will happen automatically
-    // The onAuthStateChange handler will catch the callback
   };
 
   const resetPassword = async (email: string) => {
@@ -291,7 +264,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       redirectTo: `${window.location.origin}/reset-password`,
     });
     if (error) {
-      // Provide helpful error messages
       if (error.message.includes('rate limit') || error.message.includes('too many')) {
         throw new Error('Email rate limit exceeded. Please wait 1 hour or reset password manually in Supabase dashboard.');
       }
@@ -303,18 +275,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (demoMode) {
       setDemoMode(false);
       setUser(null);
-      setProfile(null);
+      setProfileSafe(null);
       setSession(null);
       return;
     }
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
-    setProfile(null);
+    setProfileSafe(null);
   };
 
   const refreshProfile = async () => {
     if (demoMode) return;
     if (user) {
+      fetchingRef.current = false;
       await fetchProfile(user.id);
     }
   };
@@ -325,7 +298,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTimeRemaining(0);
   };
 
-  // Session timeout effect - tracks inactivity and shows warning/logout
   useEffect(() => {
     if (!user || demoMode) {
       setSessionWarning(false);
@@ -340,30 +312,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const timeUntilWarning = SESSION_TIMEOUT - SESSION_WARNING_TIME - inactiveTime;
 
       if (inactiveTime >= SESSION_TIMEOUT) {
-        // Session expired - logout
         console.log('Session expired due to inactivity');
         await signOut();
         setSessionWarning(false);
         setTimeRemaining(0);
       } else if (timeUntilWarning <= 0) {
-        // Show warning
         setSessionWarning(true);
-        setTimeRemaining(Math.ceil(timeUntilTimeout / 1000)); // seconds remaining
+        setTimeRemaining(Math.ceil(timeUntilTimeout / 1000));
       } else {
         setSessionWarning(false);
         setTimeRemaining(0);
       }
     };
 
-    // Check every second
     const interval = setInterval(checkInactivity, 1000);
-    checkInactivity(); // Initial check
+    checkInactivity();
 
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, demoMode, lastActivity]);
 
-  // Track user activity (mouse, keyboard, clicks, scroll)
   useEffect(() => {
     if (!user || demoMode) return;
 
@@ -387,7 +355,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [user, demoMode, sessionWarning]);
 
-  // Reset activity timer when user logs in
   useEffect(() => {
     if (user && !demoMode) {
       setLastActivity(Date.now());
@@ -396,20 +363,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ 
-        user, 
-        session, 
-        profile, 
-        loading, 
-        demoMode, 
+      value={{
+        user,
+        session,
+        profile,
+        loading,
+        profileLoading,
+        demoMode,
         sessionWarning,
         timeRemaining,
-        signUp, 
-        signIn, 
-        signInWithGoogle, 
-        signOut, 
-        refreshProfile, 
-        enterDemoMode, 
+        signUp,
+        signIn,
+        signInWithGoogle,
+        signOut,
+        refreshProfile,
+        enterDemoMode,
         resetPassword,
         extendSession,
       }}
