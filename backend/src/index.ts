@@ -14,6 +14,8 @@ import videoRoutes from './routes/video';
 import authorityScoreRoutes from './routes/authorityScore';
 import libraryRoutes from './routes/library';
 import statsRoutes from './routes/stats';
+import calendarRoutes from './routes/calendar';
+import paymentRoutes, { handleWebhook } from './routes/payments';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -23,6 +25,10 @@ app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   credentials: true,
 }));
+
+// Stripe webhook needs raw body BEFORE express.json()
+app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), handleWebhook);
+
 app.use(express.json());
 
 // Health check
@@ -39,6 +45,8 @@ app.use('/api/video', authMiddleware, videoRoutes);
 app.use('/api/authority-score', authMiddleware, authorityScoreRoutes);
 app.use('/api/library', authMiddleware, libraryRoutes);
 app.use('/api/stats', authMiddleware, statsRoutes);
+app.use('/api/calendar', authMiddleware, calendarRoutes);
+app.use('/api/payments', authMiddleware, paymentRoutes);
 
 // Start server
 app.listen(PORT, () => {

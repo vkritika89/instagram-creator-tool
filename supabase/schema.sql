@@ -58,6 +58,22 @@ CREATE TABLE IF NOT EXISTS videos (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 6. Content Calendar (for scheduling posts with date/time)
+CREATE TABLE IF NOT EXISTS content_calendar (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  scheduled_date DATE NOT NULL,
+  scheduled_time TIME NOT NULL,
+  content_type TEXT NOT NULL CHECK (content_type IN ('reel_script', 'video', 'caption', 'custom')),
+  content_id UUID,
+  content_preview TEXT DEFAULT '',
+  status TEXT DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'posted', 'missed')),
+  notes TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- =============================================
 -- Indexes for faster queries
 -- =============================================
@@ -71,6 +87,9 @@ CREATE INDEX IF NOT EXISTS idx_captions_created_at ON captions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_videos_user_id ON videos(user_id);
 CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status);
 CREATE INDEX IF NOT EXISTS idx_videos_created_at ON videos(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_content_calendar_user_id ON content_calendar(user_id);
+CREATE INDEX IF NOT EXISTS idx_content_calendar_date ON content_calendar(scheduled_date);
+CREATE INDEX IF NOT EXISTS idx_content_calendar_created_at ON content_calendar(created_at DESC);
 
 -- =============================================
 -- Row Level Security (RLS) Policies
@@ -167,3 +186,56 @@ DROP POLICY IF EXISTS "Users can delete own videos" ON videos;
 CREATE POLICY "Users can delete own videos"
   ON videos FOR DELETE
   USING (auth.uid() = user_id);
+
+-- Content Calendar: users can only access their own calendar
+ALTER TABLE content_calendar ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view own calendar" ON content_calendar;
+CREATE POLICY "Users can view own calendar"
+  ON content_calendar FOR SELECT
+  USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert own calendar" ON content_calendar;
+CREATE POLICY "Users can insert own calendar"
+  ON content_calendar FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update own calendar" ON content_calendar;
+CREATE POLICY "Users can update own calendar"
+  ON content_calendar FOR UPDATE
+  USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can delete own calendar" ON content_calendar;
+CREATE POLICY "Users can delete own calendar"
+  ON content_calendar FOR DELETE
+  USING (auth.uid() = user_id);
+
+-- ─── Subscriptions ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id                UUID REFERENCES auth.users(id) ON DELETE CASCADE UNIQUE NOT NULL,
+  stripe_customer_id     TEXT,
+  stripe_subscription_id TEXT,
+  plan                   TEXT NOT NULL DEFAULT 'free',     -- 'free' | 'basic' | 'plus'
+  status                 TEXT NOT NULL DEFAULT 'inactive', -- 'active' | 'inactive' | 'cancelled' | 'past_due'
+  current_period_end     TIMESTAMPTZ,
+  created_at             TIMESTAMPTZ DEFAULT NOW(),
+  updated_at             TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS subscriptions_user_id_idx ON subscriptions(user_id);
+
+-- RLS: users can only read their own subscription row
+ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view own subscription" ON subscriptions;
+CREATE POLICY "Users can view own subscription"
+  ON subscriptions FOR SELECT
+  USING (auth.uid() = user_id);
+
+-- Service role (backend) can upsert subscriptions via webhook
+DROP POLICY IF EXISTS "Service role can manage subscriptions" ON subscriptions;
+CREATE POLICY "Service role can manage subscriptions"
+  ON subscriptions FOR ALL
+  USING (true)
+  WITH CHECK (true);

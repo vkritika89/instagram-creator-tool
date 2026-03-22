@@ -4,24 +4,82 @@ import { supabaseAdmin } from '../lib/supabase';
 
 const router = Router();
 
-// POST /api/video/generate - Save video generation request
+const FREE_VIDEO_LIMIT = 3;
+
+// Helper — returns true if user has an active paid subscription
+async function hasPaidSubscription(userId: string): Promise<boolean> {
+  const { data } = await supabaseAdmin
+    .from('subscriptions')
+    .select('status')
+    .eq('user_id', userId)
+    .single();
+  // cancelling users still have access until period end
+  return data?.status === 'active' || data?.status === 'cancelling';
+}
+
+// GET /api/video/usage — returns how many videos the user has generated
+router.get('/usage', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+
+    const [{ count }, isPaid] = await Promise.all([
+      supabaseAdmin
+        .from('videos')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .then(r => ({ count: r.count ?? 0 })),
+      hasPaidSubscription(userId),
+    ]);
+
+    res.json({
+      used:        count,
+      limit:       FREE_VIDEO_LIMIT,
+      isPaid,
+      canGenerate: isPaid || count < FREE_VIDEO_LIMIT,
+    });
+  } catch (err) {
+    console.error('Usage check error:', err);
+    res.status(500).json({ error: 'Failed to fetch usage' });
+  }
+});
+
+// POST /api/video/generate - Save video generation request (enforces free limit)
 router.post('/generate', async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.userId!;
     const { description, video_url, status = 'pending', metadata = {} } = req.body;
-    
+
     if (!description) {
       return res.status(400).json({ error: 'Description is required' });
+    }
+
+    // Enforce free tier limit
+    const isPaid = await hasPaidSubscription(userId);
+    if (!isPaid) {
+      const { count } = await supabaseAdmin
+        .from('videos')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+
+      if ((count ?? 0) >= FREE_VIDEO_LIMIT) {
+        return res.status(403).json({
+          error:   'limit_reached',
+          message: `Free plan allows ${FREE_VIDEO_LIMIT} video generations. Please upgrade to continue.`,
+          used:    count,
+          limit:   FREE_VIDEO_LIMIT,
+        });
+      }
     }
 
     // Save to database
     const { data, error } = await supabaseAdmin
       .from('videos')
       .insert({
-        user_id: req.userId!,
+        user_id:     userId,
         description,
-        video_url: video_url || null,
-        status: status || 'pending',
-        metadata: metadata || {},
+        video_url:   video_url || null,
+        status:      status || 'pending',
+        metadata:    metadata || {},
       })
       .select()
       .single();

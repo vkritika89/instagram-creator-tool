@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -14,41 +14,49 @@ import {
   Hash,
   TrendingUp,
   Star,
-  Heart,
-  MessageCircle,
-  Bookmark,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const REEL_CARDS = [
-  { gradient: 'from-pink-500 via-rose-500 to-red-500', hook: '3 mistakes killing your IG growth', views: '24.5K', emoji: '🔥' },
-  { gradient: 'from-violet-500 via-purple-500 to-indigo-500', hook: 'How I gained 5K followers in 30 days', views: '42.1K', emoji: '🚀' },
-  { gradient: 'from-amber-500 via-orange-500 to-red-500', hook: 'The caption formula that went viral', views: '18.7K', emoji: '✍️' },
-  { gradient: 'from-emerald-500 via-teal-500 to-cyan-500', hook: 'Stop scrolling. Start creating.', views: '31.2K', emoji: '💡' },
-  { gradient: 'from-blue-500 via-indigo-500 to-violet-500', hook: 'My morning routine as a creator', views: '15.3K', emoji: '📱' },
-  { gradient: 'from-rose-500 via-pink-500 to-fuchsia-500', hook: 'My exact content strategy 2026', views: '56.8K', emoji: '🎯' },
-  { gradient: 'from-cyan-500 via-blue-500 to-indigo-500', hook: 'POV: Your Reel hits 1M views', views: '89.2K', emoji: '🤯' },
-  { gradient: 'from-yellow-500 via-amber-500 to-orange-500', hook: 'Hook formula that gets saves', views: '37.4K', emoji: '🪝' },
-];
-
-function MiniReelCard({ reel }: { reel: typeof REEL_CARDS[0] }) {
+// ─── Scroll-reveal wrapper ────────────────────────────────────────────────────
+function RevealOnScroll({
+  children,
+  delay = 0,
+  direction = 'up',
+  className = '',
+}: {
+  children: React.ReactNode;
+  delay?: number;
+  direction?: 'up' | 'left' | 'right' | 'fade';
+  className?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { setVisible(entry.isIntersecting); },
+      { threshold: 0.12 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  const initialTransform =
+    direction === 'up'    ? 'translateY(40px)' :
+    direction === 'left'  ? 'translateX(-40px)' :
+    direction === 'right' ? 'translateX(40px)' : 'none';
   return (
-    <div className="flex-shrink-0 w-36 h-56 relative rounded-2xl overflow-hidden shadow-lg">
-      <div className={`absolute inset-0 bg-gradient-to-br ${reel.gradient}`} />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
-      <div className="absolute top-2 right-2 text-sm">{reel.emoji}</div>
-      <div className="absolute right-2 bottom-16 flex flex-col items-center gap-2 opacity-70">
-        <Heart className="w-3.5 h-3.5 text-white" />
-        <MessageCircle className="w-3.5 h-3.5 text-white" />
-        <Bookmark className="w-3.5 h-3.5 text-white" />
-      </div>
-      <div className="absolute bottom-0 left-0 right-0 p-2.5">
-        <p className="text-white text-[10px] font-bold leading-snug mb-1 line-clamp-2">{reel.hook}</p>
-        <span className="text-white/50 text-[8px]">▶ {reel.views}</span>
-      </div>
+    <div ref={ref} className={className} style={{
+      opacity: visible ? 1 : 0,
+      transform: visible ? 'translate(0,0)' : initialTransform,
+      transition: `opacity 0.65s cubic-bezier(.22,1,.36,1) ${delay}ms, transform 0.65s cubic-bezier(.22,1,.36,1) ${delay}ms`,
+    }}>
+      {children}
     </div>
   );
 }
+// ─────────────────────────────────────────────────────────────────────────────
+
 
 export default function Signup() {
   const { signUp, signInWithGoogle } = useAuth();
@@ -105,29 +113,29 @@ export default function Signup() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-[#09090f]">
       {/* ─── Hero Section with Signup Form ─── */}
       <section className="relative min-h-screen overflow-hidden">
-        {/* Light abstract bg */}
-        <div className="absolute inset-0 bg-gradient-to-br from-pink-50 via-white to-violet-50" />
-        <div className="absolute inset-0 opacity-[0.04]" style={{
-          backgroundImage: 'radial-gradient(circle at 1px 1px, #ec4899 1px, transparent 0)',
+        {/* Dark abstract bg */}
+        <div className="absolute inset-0 bg-[#09090f]" />
+        <div className="absolute inset-0 opacity-[0.03]" style={{
+          backgroundImage: 'radial-gradient(circle at 1px 1px, #a78bfa 1px, transparent 0)',
           backgroundSize: '32px 32px',
         }} />
-        <div className="absolute top-0 right-1/4 w-[600px] h-[600px] bg-pink-200/25 rounded-full blur-[120px]" />
-        <div className="absolute bottom-0 left-1/4 w-[500px] h-[500px] bg-violet-200/25 rounded-full blur-[120px]" />
+        <div className="absolute top-0 right-1/4 w-[600px] h-[600px] bg-pink-500/10 rounded-full blur-[120px]" />
+        <div className="absolute bottom-0 left-1/4 w-[500px] h-[500px] bg-brand-500/10 rounded-full blur-[120px]" />
 
         {/* Nav */}
         <div className="relative z-20 flex items-center justify-between px-6 md:px-12 py-5">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 bg-gradient-to-br from-brand-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg shadow-brand-500/20">
+            <div className="w-10 h-10 bg-gradient-to-br from-brand-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg shadow-brand-500/30">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-extrabold text-slate-900 tracking-tight">CreatorCanvas</span>
+            <span className="text-xl font-extrabold text-white tracking-tight">CreatorCanvas</span>
           </div>
           <Link
             to="/login"
-            className="hidden sm:inline-flex items-center gap-1.5 px-5 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-all"
+            className="hidden sm:inline-flex items-center gap-1.5 px-5 py-2 rounded-xl border border-white/10 bg-white/5 text-slate-300 text-sm font-semibold hover:bg-white/10 transition-all"
           >
             Sign in <ArrowRight className="w-3.5 h-3.5" />
           </Link>
@@ -137,18 +145,18 @@ export default function Signup() {
         <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 pt-8 md:pt-16 pb-20 flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
           {/* Left text */}
           <div className="flex-1 max-w-xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-pink-100 text-pink-700 text-xs font-semibold mb-6">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-pink-500/10 border border-pink-500/20 text-pink-400 text-xs font-semibold mb-6">
               <Sparkles className="w-3 h-3" /> Free to get started
             </div>
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-slate-900 leading-[1.1] mb-6 tracking-tight">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-white leading-[1.1] mb-6 tracking-tight">
               Start creating
               <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-rose-500 to-violet-600">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-rose-400 to-violet-400">
                 content that converts.
               </span>
             </h1>
-            <p className="text-lg text-slate-500 leading-relaxed mb-8 max-w-md">
-              Join thousands of creators who use AI to plan, script, and grow their Instagram audience faster than ever.
+            <p className="text-lg text-slate-400 leading-relaxed mb-8 max-w-md">
+              Join thousands of creators who use AI to plan, script, and grow their audience on Instagram, TikTok, and YouTube faster than ever.
             </p>
 
             {/* Features */}
@@ -160,10 +168,10 @@ export default function Signup() {
                 { icon: TrendingUp, text: 'Growth tracking & insights' },
               ].map((f) => (
                 <div key={f.text} className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center">
-                    <f.icon className="w-4 h-4 text-brand-500" />
+                  <div className="w-8 h-8 rounded-lg bg-brand-500/10 border border-brand-500/20 flex items-center justify-center">
+                    <f.icon className="w-4 h-4 text-brand-400" />
                   </div>
-                  <span className="text-sm text-slate-700 font-medium">{f.text}</span>
+                  <span className="text-sm text-slate-300 font-medium">{f.text}</span>
                 </div>
               ))}
             </div>
@@ -172,30 +180,30 @@ export default function Signup() {
             <div className="flex items-center gap-4">
               <div className="flex -space-x-2">
                 {['from-pink-400 to-rose-500', 'from-violet-400 to-purple-500', 'from-amber-400 to-orange-500', 'from-emerald-400 to-teal-500'].map((c, i) => (
-                  <div key={i} className={`w-8 h-8 rounded-full bg-gradient-to-br ${c} border-2 border-white flex items-center justify-center text-white text-[10px] font-bold`}>
+                  <div key={i} className={`w-8 h-8 rounded-full bg-gradient-to-br ${c} border-2 border-[#09090f] flex items-center justify-center text-white text-[10px] font-bold`}>
                     {['S', 'A', 'P', 'M'][i]}
                   </div>
                 ))}
               </div>
               <div>
-                <p className="text-sm font-bold text-slate-800">2,500+ creators</p>
-                <p className="text-xs text-slate-400">are already growing</p>
+                <p className="text-sm font-bold text-white">2,500+ creators</p>
+                <p className="text-xs text-slate-500">are already growing</p>
               </div>
             </div>
           </div>
 
           {/* Right — Signup form */}
           <div className="w-full max-w-md flex-shrink-0">
-            <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl shadow-slate-200/60 border border-white/60 p-8">
+            <div className="bg-[#13131f] rounded-3xl shadow-2xl shadow-black/50 border border-white/10 p-8">
               <div className="mb-6">
-                <h2 className="text-xl font-bold text-slate-900">Create your account</h2>
-                <p className="text-slate-500 text-sm mt-1">Start your growth journey — it&apos;s free.</p>
+                <h2 className="text-xl font-bold text-white">Create your account</h2>
+                <p className="text-slate-400 text-sm mt-1">Start your growth journey — it&apos;s free.</p>
               </div>
 
               {/* Google */}
               <button
                 onClick={handleGoogle}
-                className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium text-sm transition-all hover:shadow-md"
+                className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-slate-200 font-medium text-sm transition-all"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
@@ -207,39 +215,39 @@ export default function Signup() {
               </button>
 
               <div className="relative my-5">
-                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200" /></div>
-                <div className="relative flex justify-center text-xs"><span className="bg-white/80 px-3 text-slate-400">or sign up with email</span></div>
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10" /></div>
+                <div className="relative flex justify-center text-xs"><span className="bg-[#13131f] px-3 text-slate-500">or sign up with email</span></div>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Email</label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all bg-white" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-white/10 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500/60 transition-all bg-[#1c1c2e]" />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Password</label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Create a strong password" required className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all bg-white" />
-                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                    <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Create a strong password" required className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-white/10 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500/60 transition-all bg-[#1c1c2e]" />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                   {password.length > 0 && (
                     <div className="mt-2">
-                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
                         <div className={`h-full ${passwordStrength.color} rounded-full transition-all duration-300`} style={{ width: passwordStrength.width }} />
                       </div>
-                      <p className="text-xs mt-1 text-slate-500">Strength: <span className="font-medium">{passwordStrength.label}</span></p>
+                      <p className="text-xs mt-1 text-slate-500">Strength: <span className="font-medium text-slate-400">{passwordStrength.label}</span></p>
                     </div>
                   )}
                 </div>
 
-                <button type="submit" disabled={loading} className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-brand-600 to-pink-500 text-white font-semibold text-sm hover:opacity-90 disabled:opacity-50 transition-all hover:shadow-lg hover:shadow-brand-500/25">
+                <button type="submit" disabled={loading} className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-brand-600 to-pink-500 text-white font-semibold text-sm hover:opacity-90 disabled:opacity-50 transition-all hover:shadow-lg hover:shadow-brand-500/30">
                   {loading ? 'Creating account…' : 'Create free account'}
                 </button>
               </form>
@@ -247,86 +255,60 @@ export default function Signup() {
 
             <p className="text-center mt-5 text-sm text-slate-500">
               Already have an account?{' '}
-              <Link to="/login" className="text-brand-600 font-semibold hover:underline">Sign in</Link>
+              <Link to="/login" className="text-brand-400 font-semibold hover:underline">Sign in</Link>
             </p>
           </div>
         </div>
 
-        {/* Scroll indicator */}
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center animate-bounce">
-          <span className="text-xs text-slate-400 font-medium mb-1">Scroll to explore</span>
-          <div className="w-5 h-8 rounded-full border-2 border-slate-300 flex justify-center pt-1.5">
-            <div className="w-1 h-2 bg-slate-400 rounded-full" />
-          </div>
-        </div>
-      </section>
-
-      {/* ─── Reel Showcase Marquee ─── */}
-      <section className="py-16 bg-gradient-to-b from-white to-slate-50 overflow-hidden">
-        <div className="text-center mb-10 px-6">
-          <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 mb-2">
-            What creators are building
-          </h2>
-          <p className="text-slate-500 text-sm max-w-sm mx-auto">
-            Viral Reels, carousels, and stories — generated in seconds.
-          </p>
-        </div>
-        <div className="relative">
-          <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-white to-transparent z-10 pointer-events-none" />
-          <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-slate-50 to-transparent z-10 pointer-events-none" />
-          <div className="flex gap-4 animate-marquee-left hover:[animation-play-state:paused]">
-            {[...REEL_CARDS, ...REEL_CARDS].map((reel, idx) => (
-              <MiniReelCard key={`sr-${idx}`} reel={reel} />
-            ))}
-          </div>
-        </div>
       </section>
 
       {/* ─── Why Join ─── */}
-      <section className="py-16 bg-white px-6">
+      <section className="py-16 bg-[#0f0f1b] px-6">
         <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 mb-2">Why creators choose CreatorCanvas</h2>
-            <p className="text-slate-500 text-sm">Everything you need to go from posting randomly to growing strategically.</p>
-          </div>
+          <RevealOnScroll className="text-center mb-12">
+            <h2 className="text-2xl md:text-3xl font-extrabold text-white mb-2">Why creators choose CreatorCanvas</h2>
+            <p className="text-slate-400 text-sm">Everything you need to go from posting randomly to growing strategically.</p>
+          </RevealOnScroll>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {[
-              { icon: Zap, title: 'Save 5+ hours/week', desc: 'Stop staring at a blank screen. AI generates your entire week\'s content.', color: 'from-violet-500 to-purple-600' },
-              { icon: Film, title: 'Scripts that go viral', desc: 'Hooks, talking points, CTAs — all written to keep viewers watching.', color: 'from-pink-500 to-rose-600' },
-              { icon: Hash, title: 'Hashtags that reach', desc: 'Niche-aware packs that actually get your content discovered.', color: 'from-amber-500 to-orange-600' },
-              { icon: TrendingUp, title: 'Track your growth', desc: 'Authority Score shows your progress and what to improve.', color: 'from-emerald-500 to-teal-600' },
-            ].map((f) => (
-              <div key={f.title} className="flex gap-4 p-5 bg-slate-50 rounded-2xl border border-slate-100 hover:shadow-lg transition-all hover:-translate-y-0.5">
-                <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${f.color} flex items-center justify-center flex-shrink-0 shadow-lg`}>
-                  <f.icon className="w-5 h-5 text-white" />
+              { icon: Zap, title: 'Save 5+ hours/week', desc: 'Stop staring at a blank screen. AI generates your entire week\'s content.', color: 'from-violet-500 to-purple-600', dir: 'left' as const },
+              { icon: Film, title: 'Scripts that go viral', desc: 'Hooks, talking points, CTAs — all written to keep viewers watching.', color: 'from-pink-500 to-rose-600', dir: 'right' as const },
+              { icon: Hash, title: 'Hashtags that reach', desc: 'Niche-aware packs that actually get your content discovered.', color: 'from-amber-500 to-orange-600', dir: 'left' as const },
+              { icon: TrendingUp, title: 'Track your growth', desc: 'Authority Score shows your progress and what to improve.', color: 'from-emerald-500 to-teal-600', dir: 'right' as const },
+            ].map((f, i) => (
+              <RevealOnScroll key={f.title} delay={i * 100} direction={f.dir}>
+                <div className="flex gap-4 p-5 bg-[#13131f] rounded-2xl border border-white/[0.07] hover:border-white/15 hover:shadow-lg hover:shadow-black/30 transition-all hover:-translate-y-0.5 h-full">
+                  <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${f.color} flex items-center justify-center flex-shrink-0 shadow-lg`}>
+                    <f.icon className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-white mb-1">{f.title}</h3>
+                    <p className="text-sm text-slate-400 leading-relaxed">{f.desc}</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 mb-1">{f.title}</h3>
-                  <p className="text-sm text-slate-500 leading-relaxed">{f.desc}</p>
-                </div>
-              </div>
+              </RevealOnScroll>
             ))}
           </div>
         </div>
       </section>
 
       {/* ─── Testimonial ─── */}
-      <section className="py-16 bg-slate-50 px-6">
-        <div className="max-w-2xl mx-auto text-center">
+      <section className="py-16 bg-[#09090f] px-6">
+        <RevealOnScroll direction="fade" className="max-w-2xl mx-auto text-center">
           <div className="flex justify-center gap-0.5 mb-5">
             {[...Array(5)].map((_, i) => <Star key={i} className="w-5 h-5 text-yellow-400 fill-yellow-400" />)}
           </div>
-          <p className="text-xl md:text-2xl font-bold text-slate-800 leading-relaxed mb-6 italic">
+          <p className="text-xl md:text-2xl font-bold text-slate-200 leading-relaxed mb-6 italic">
             &ldquo;CreatorCanvas helped me go from 2K to 18K followers in 3 months. The AI scripts save me hours every single week.&rdquo;
           </p>
           <div className="flex items-center justify-center gap-3">
             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-pink-400 to-rose-500 flex items-center justify-center text-white font-bold text-lg">S</div>
             <div className="text-left">
-              <p className="font-bold text-slate-900">Sarah K.</p>
-              <p className="text-sm text-slate-400">Fitness Creator • 18K followers</p>
+              <p className="font-bold text-white">Sarah K.</p>
+              <p className="text-sm text-slate-500">Fitness Creator • 18K followers</p>
             </div>
           </div>
-        </div>
+        </RevealOnScroll>
       </section>
 
       {/* ─── CTA ─── */}
@@ -335,7 +317,7 @@ export default function Signup() {
           backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)',
           backgroundSize: '40px 40px',
         }} />
-        <div className="relative z-10 max-w-2xl mx-auto text-center text-white">
+        <RevealOnScroll direction="up" className="relative z-10 max-w-2xl mx-auto text-center text-white">
           <h2 className="text-2xl md:text-3xl font-extrabold mb-3">Ready to start growing?</h2>
           <p className="text-white/70 mb-8">Create your free account in 30 seconds. No credit card needed.</p>
           <button
@@ -344,19 +326,19 @@ export default function Signup() {
           >
             <Sparkles className="w-4 h-4" /> Sign Up Now <ArrowRight className="w-4 h-4" />
           </button>
-        </div>
+        </RevealOnScroll>
       </section>
 
       {/* ─── Footer ─── */}
-      <footer className="py-8 border-t border-slate-100 bg-white px-6">
+      <footer className="py-8 border-t border-white/[0.07] bg-[#09090f] px-6">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 bg-gradient-to-br from-brand-500 to-pink-500 rounded-lg flex items-center justify-center">
               <Sparkles className="w-3.5 h-3.5 text-white" />
             </div>
-            <span className="text-sm font-bold text-slate-700">CreatorCanvas</span>
+            <span className="text-sm font-bold text-slate-400">CreatorCanvas</span>
           </div>
-          <p className="text-xs text-slate-400">&copy; 2026 CreatorCanvas. Built for creators, by creators.</p>
+          <p className="text-xs text-slate-600">&copy; 2026 CreatorCanvas. Built for creators, by creators.</p>
         </div>
       </footer>
     </div>
